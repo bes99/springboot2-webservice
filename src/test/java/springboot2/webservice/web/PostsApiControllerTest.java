@@ -1,15 +1,18 @@
 package springboot2.webservice.web;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
+import org.springframework.http.*;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.web.context.WebApplicationContext;
 import springboot2.webservice.domain.posts.Posts;
 import springboot2.webservice.domain.posts.PostsRepository;
 import springboot2.webservice.web.dto.PostsSaveRequestDto;
@@ -18,6 +21,9 @@ import springboot2.webservice.web.dto.PostsUpdateRequestDto;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(webEnvironment = SpringBootTest.
         WebEnvironment.RANDOM_PORT)
@@ -37,7 +43,21 @@ public class PostsApiControllerTest {
         postsRepository.deleteAll();
     }
 
+    @Autowired
+    private WebApplicationContext context;
+
+    private MockMvc mvc;
+
+    @BeforeEach
+    public void setup(){
+        mvc = MockMvcBuilders
+                .webAppContextSetup(context)
+                .apply(springSecurity())
+                .build();
+    }
+
     @Test
+    @WithMockUser(roles = "USER")
     public void posts_등록() throws Exception{
         //given
         String title = "title";
@@ -53,6 +73,10 @@ public class PostsApiControllerTest {
         //when
         ResponseEntity<Long> responseEntity = restTemplate.
                 postForEntity(url,requestDto,Long.class);
+        mvc.perform(post(url)
+                .contentType(MediaType.APPLICATION_JSON)
+                        .content(new ObjectMapper().writeValueAsString(requestDto)))
+                        .andExpect(status().isOk());
 
         //then
         assertThat(responseEntity.getStatusCode()).
@@ -66,6 +90,7 @@ public class PostsApiControllerTest {
     }
 
     @Test
+    @WithMockUser(roles = "USER")
     public void Posts_수정된다() throws Exception{
         //given
         Posts posts = postsRepository.save(Posts.builder()
@@ -90,8 +115,12 @@ public class PostsApiControllerTest {
 
         //when
         ResponseEntity<Long> responseEntity = restTemplate.
-                exchange(url, HttpMethod.PUT,requestEntity,Long.class);
+                exchange(url, HttpMethod.POST,requestEntity,Long.class);
 
+        mvc.perform(post(url)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(new ObjectMapper().writeValueAsString(requestDto)))
+                .andExpect(status().isOk());
         //then
         assertThat(responseEntity.getStatusCode()).isEqualTo(HttpStatus.OK);
         assertThat(responseEntity.getBody()).isGreaterThan(0L);
